@@ -3,130 +3,143 @@ use anchor_lang::prelude::*;
 declare_id!("3saJFmuArB4WQcna8deXe5ijLbeFc4Vhwn4nKFjLn7AU");
 
 #[program]
-pub mod biblioteca {
+pub mod poemarios {
     use super::*;
 
-    pub fn crear_biblioteca(ctx: Context<NuevaBiblioteca>, nombre: String) -> Result<()> {
+    /// Crea un nuevo poemario para el usuario
+    pub fn crear_poemario(ctx: Context<NuevoPoemario>, nombre: String) -> Result<()> {
         let owner = ctx.accounts.owner.key();
-        let libros: Vec<Libro> = Vec::new();
+        let poemas: Vec<Poema> = Vec::new();
         
-        ctx.accounts.biblioteca.set_inner(Biblioteca {
+        ctx.accounts.poemario.set_inner(Poemario {
             owner,
             nombre,
-            libros,
+            poemas,
         });
 
-        msg!("Biblioteca creada exitosamente!");
+        msg!("Poemario creado exitosamente!");
         Ok(())
     }
 
-    pub fn agregar_libro(ctx: Context<NuevoLibro>, nombre: String, paginas: u16) -> Result<()> {
-        // Corrección: Usar == para comparar y accounts en plural
-        require!(ctx.accounts.biblioteca.owner == ctx.accounts.owner.key(), Errores::NoEresElOwner);
+    /// Agrega un poema al poemario del usuario
+    pub fn agregar_poema(
+        ctx: Context<ModificarPoemario>, 
+        titulo: String, 
+        estilo: String, 
+        versos: u16,
+        contenido: String
+    ) -> Result<()> {
+        require!(ctx.accounts.poemario.owner == ctx.accounts.owner.key(), Errores::NoEresElOwner);
 
-        let libro = Libro {
-            nombre,
-            paginas,
-            disponible: true, // Faltaba definir el valor inicial de 'disponible'
+        let poema = Poema {
+            titulo,
+            estilo,
+            versos,
+            contenido,
+            publicado: true,
         };
 
-        ctx.accounts.biblioteca.libros.push(libro);
+        ctx.accounts.poemario.poemas.push(poema);
+        msg!("Poema agregado exitosamente!");
         Ok(())
     }
 
-    // Corrección: Se agregó el Context
-    pub fn ver_libro(context: Context<NuevoLibro>) -> Result<()> {
-        require!(context.accounts.biblioteca.owner == context.accounts.owner.key(), Errores::NoEresElOwner);
+    /// Visualiza todos los poemas del poemario
+    pub fn ver_poemas(context: Context<ModificarPoemario>) -> Result<()> {
+        require!(context.accounts.poemario.owner == context.accounts.owner.key(), Errores::NoEresElOwner);
 
-        msg!("La lista de libros actualmente es: {:#?}", 
-        context.accounts.biblioteca.libros);
+        msg!("Lista de poemas en el poemario: {:#?}", 
+        context.accounts.poemario.poemas);
 
         Ok(())
     }
 
-    pub fn eliminar_libro (context:Context<NuevoLibro>, nombre: String) -> Result<()> {
-        require!(context.accounts.biblioteca.owner == context.accounts.owner.key(), Errores::NoEresElOwner);
+    /// Elimina un poema del poemario por su título
+    pub fn eliminar_poema(context: Context<ModificarPoemario>, titulo: String) -> Result<()> {
+        require!(context.accounts.poemario.owner == context.accounts.owner.key(), Errores::NoEresElOwner);
        
-       let libros: &mut Vec<Libro> = &mut context.accounts.biblioteca.libros;
+        let poemas: &mut Vec<Poema> = &mut context.accounts.poemario.poemas;
 
-        for libro in 0..libros.len(){
-            if libros[libro].nombre == nombre {
-            libros.remove(libro);
-            msg!("Libro {} eliminado!", nombre);
-            return Ok(());
-        }
-        }
-        Err(Errores::LibroNoExiste.into())
-    }
-
-    pub fn alternar_estado(context:Context<NuevoLibro>, nombre: String) -> Result<()>{
-        require!(context.accounts.biblioteca.owner == context.accounts.owner.key(), Errores::NoEresElOwner);        
-
-        let libros: &mut Vec<Libro> = &mut context.accounts.biblioteca.libros;
-
-        for libro in 0..libros.len(){
-            let estado = libros[libro].disponible;
-            
-            if libros[libro].nombre == nombre{
-                let nuevo_estado: bool = !estado;
-                libros[libro].disponible = nuevo_estado;  
-                msg!("El libro {} ahora está {}", nombre, nuevo_estado);              
+        for i in 0..poemas.len() {
+            if poemas[i].titulo == titulo {
+                poemas.remove(i);
+                msg!("Poema '{}' eliminado!", titulo);
                 return Ok(());
             }
-
         }
-        Err(Errores::LibroNoExiste.into())
+        Err(Errores::PoemaNoExiste.into())
+    }
 
+    /// Alterna el estado de publicación de un poema
+    pub fn alternar_estado(context: Context<ModificarPoemario>, titulo: String) -> Result<()> {
+        require!(context.accounts.poemario.owner == context.accounts.owner.key(), Errores::NoEresElOwner);        
+
+        let poemas: &mut Vec<Poema> = &mut context.accounts.poemario.poemas;
+
+        for i in 0..poemas.len() {
+            let estado = poemas[i].publicado;
+            
+            if poemas[i].titulo == titulo {
+                let nuevo_estado: bool = !estado;
+                poemas[i].publicado = nuevo_estado;  
+                msg!("El poema '{}' ahora está {}", titulo, if nuevo_estado { "publicado" } else { "privado" });              
+                return Ok(());
+            }
+        }
+        Err(Errores::PoemaNoExiste.into())
     }
 }
 
 #[error_code]
 pub enum Errores {
-    #[msg("Error: No eres el propietario de la biblioteca que deseas modificar.")]
+    #[msg("Error: No eres el propietario de este poemario.")]
     NoEresElOwner,
 
-    #[msg("Error: El libro proporcionado no existe.")]
-    LibroNoExiste
+    #[msg("Error: El poema proporcionado no existe.")]
+    PoemaNoExiste
 }
 
 #[account]
 #[derive(InitSpace)]
-pub struct Biblioteca {
+pub struct Poemario {
     pub owner: Pubkey,
     #[max_len(60)]
     pub nombre: String,
     #[max_len(10)]
-    pub libros: Vec<Libro>,
+    pub poemas: Vec<Poema>,
 }
 
 #[derive(InitSpace, AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Debug)]
-pub struct Libro {
+pub struct Poema {
     #[max_len(60)]
-    pub nombre: String,
-    pub paginas: u16,
-    pub disponible: bool,
+    pub titulo: String,
+    #[max_len(30)]
+    pub estilo: String,
+    pub versos: u16,
+    #[max_len(500)]
+    pub contenido: String,
+    pub publicado: bool,
 }
 
 #[derive(Accounts)]
-pub struct NuevaBiblioteca<'info> {
+pub struct NuevoPoemario<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
 
-    // Corrección: Se quitó el espacio entre ] y (
     #[account(
         init,
         payer = owner,
-        space = 8 + Biblioteca::INIT_SPACE, 
-        seeds = [b"biblioteca", owner.key().as_ref()],
+        space = 8 + Poemario::INIT_SPACE, 
+        seeds = [b"poemario", owner.key().as_ref()],
         bump
     )]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub poemario: Account<'info, Poemario>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct NuevoLibro<'info> {
+pub struct ModificarPoemario<'info> {
     pub owner: Signer<'info>,
     #[account(mut)]
-    pub biblioteca: Account<'info, Biblioteca>,
+    pub poemario: Account<'info, Poemario>,
 }
